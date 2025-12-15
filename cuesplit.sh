@@ -65,87 +65,34 @@ require_cmd find grep sed awk wc stat
 
 detect_disc_number() {
   local s="$1"
-  local disc=""
-
-  # Normalize case
   local lower="${s,,}"
 
-  #
-  # 1. Patterns like "(Disc 1)", "(Disc One)", "(Disc Two)"
-  #
-  if [[ "$lower" =~ \(disc[[:space:]]*([0-9]+)\) ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
-  if [[ "$lower" =~ \(disc[[:space:]]*one\) ]]; then
-    echo "1"; return
-  fi
-  if [[ "$lower" =~ \(disc[[:space:]]*two\) ]]; then
-    echo "2"; return
-  fi
-  if [[ "$lower" =~ \(disc[[:space:]]*three\) ]]; then
-    echo "3"; return
-  fi
+  # Normalize punctuation: disc-1 → disc 1, cd_2 → cd 2
+  lower="${lower//[^a-z0-9]/ }"
+  set -- $lower
 
-  #
-  # 2. CD1, CD 1, cd1, etc.
-  #
-  if [[ "$lower" =~ cd[[:space:]]*([0-9]+) ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
+  local prev=""
+  for tok in "$@"; do
+    # disc, disk, cd followed by number: disc 2
+    if [[ "$prev" =~ ^(disc|disk|cd)$ && "$tok" =~ ^[0-9]+$ ]]; then
+      echo "$tok"
+      return
+    fi
 
-  #
-  # 3. Patterns inside filenames like "Disc One.flac"
-  #
-  if [[ "$lower" =~ disc[[:space:]]*([0-9]+)\. ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
+    # combined form: disc2, cd10, disk03
+    if [[ "$tok" =~ ^(disc|disk|cd)([0-9]+)$ ]]; then
+      echo "${BASH_REMATCH[2]}"
+      return
+    fi
 
-  #
-  # 4. Patterns inside directories
-  #
-  if [[ "$lower" =~ disc[[:space:]]*([0-9]+)$ ]]; then
-    echo "${BASH_REMATCH[1]}"
-    return
-  fi
+    prev="$tok"
+  done
 
-  #
-  # 5. TEXT versions inside filenames (rare but present)
-  #
-  case "$lower" in
-    *"disc one"*) echo "1"; return ;;
-    *"disc two"*) echo "2"; return ;;
-    *"disc three"*) echo "3"; return ;;
-  esac
-
-  echo ""   # not a multi-disc release
+  echo ""   # no disc number
 }
 
 has_disc_tag() {
-  local s="${1,,}"   # lowercase
-  s="${s//[^a-z0-9]/ }"   # replace all non-alphanumerics with spaces
-  set -- $s                # tokenize by spaces: $1 $2 $3 ...
-
-  # Loop over tokens
-  for tok in "$@"; do
-    case "$tok" in
-      disc|disk|cd)
-        # next token should be a number or text number: disc 2, cd 1, disk three
-        return 0
-        ;;
-      disc1|disc2|disc3|disc4|disc5) return 0 ;;
-      disk1|disk2|disk3|disk4|disk5) return 0 ;;
-      cd1|cd2|cd3|cd4|cd5)           return 0 ;;
-      one|two|three|four|five)
-        # check if previous word was disc/disk/cd
-        return 0
-        ;;
-    esac
-  done
-
-  return 1
+  [[ -n "$(detect_disc_number "$1")" ]]
 }
 
 #############################################
